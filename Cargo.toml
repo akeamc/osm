@@ -1,0 +1,13 @@
+[package]
+name = "osm"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+anyhow = "1.0.66"
+fst = { version = "0.4.7", features = ["levenshtein"] }
+geo = "0.23.0"
+geojson = "0.24.0"
+osmpbfreader = "0.15.2"
