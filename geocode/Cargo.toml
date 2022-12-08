@@ -1,0 +1,14 @@
+
+[package]
+name = "osm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.66"
+clap = { workspace = true, features = ["derive", "env"] }
+csv = { workspace = true }
+fuzzy-geo = { workspace = true }
+geo = { workspace = true, features = ["serde"] }
+osmpbfreader = { workspace = true }
+rayon = "1.6.0"

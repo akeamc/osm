@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fs::File, io::BufReader, path::Path};
 
-use geo::Point;
+use geo::{Centroid, LineString, Point};
 use osmpbfreader::{Node, NodeId, OsmId, OsmObj, OsmPbfReader, Relation, RelationId, Way, WayId};
 
 #[derive(Debug, Default)]
@@ -32,7 +32,14 @@ impl Planet {
     pub fn obj_coords(&self, obj: &OsmId) -> Option<Point> {
         match obj {
             OsmId::Node(n) => self.node_coords(n),
-            OsmId::Way(w) => self.node_coords(self.ways.get(w)?.nodes.first()?),
+            OsmId::Way(w) => {
+                let way = self.ways.get(w)?;
+                way.nodes
+                    .iter()
+                    .map(|n| self.node_coords(n))
+                    .collect::<Option<LineString>>()?
+                    .centroid()
+            }
             OsmId::Relation(_) => todo!(),
         }
     }
