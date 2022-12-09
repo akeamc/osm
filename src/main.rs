@@ -1,10 +1,10 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
-use clap::Parser;
-use fuzzy_geo::Record;
+use clap::{Parser, Subcommand};
 use geo::{Contains, LineString, Point, Polygon};
 use osmpbfreader::{OsmId, RelationId};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
+use search::{osm, Record};
 
 fn point_relations<'a>(
     polygons: &'a [(Polygon, RelationId)],
@@ -15,22 +15,27 @@ fn point_relations<'a>(
 
 #[derive(Debug, Parser)]
 struct Config {
-    /// OSM planet file to parse (.osm.pbf).
-    #[arg(long, short)]
-    input: PathBuf,
-    /// Output file
-    #[arg(long, short)]
-    output: PathBuf,
+    #[command(subcommand)]
+    command: Command,
 }
 
-fn main() -> anyhow::Result<()> {
-    let config = Config::parse();
+#[derive(Debug, Subcommand)]
+enum Command {
+    /// Process addresses from an OSM file.
+    Address {
+        /// OSM planet file to parse (.osm.pbf).
+        #[arg(long, short)]
+        input: PathBuf,
+        /// Output file
+        #[arg(long, short)]
+        output: PathBuf,
+    },
+}
 
-    // let osm = osm::read("faroe-islands.osm.pbf")?;
-    // let osm = osm::read("albania.osm.pbf")?;
-    let osm = osm::read(config.input)?;
+fn process_addresses(input: &Path, output: &Path) -> anyhow::Result<()> {
+    let osm = osm::read(input)?;
 
-    let mut csv = csv::Writer::from_path(config.output)?;
+    let mut csv = csv::Writer::from_path(output)?;
 
     let polygons = osm
         .relations
@@ -101,7 +106,7 @@ fn main() -> anyhow::Result<()> {
                 name: name.to_string(),
                 alt_name: tags.get("alt_name").map(|s| s.to_string()),
                 operator: tags.get("operator").map(|s| s.to_string()),
-                osm_id: id,
+                osm_id: id.into(),
                 location,
                 latitude: (point.y() * 1e7).round() / 1e7,
                 longitude: (point.x() * 1e7).round() / 1e7,
@@ -116,4 +121,12 @@ fn main() -> anyhow::Result<()> {
     }
 
     Ok(())
+}
+
+fn main() -> anyhow::Result<()> {
+    let command = Config::parse().command;
+
+    match command {
+        Command::Address { input, output } => process_addresses(&input, &output),
+    }
 }

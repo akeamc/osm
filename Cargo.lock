@@ -415,20 +415,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "fuzzy-geo"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "csv",
- "geo",
- "milli",
- "osmpbfreader",
- "serde",
- "serde_json",
- "tempfile",
-]
-
-[[package]]
 name = "fxhash"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -450,7 +436,6 @@ dependencies = [
  "num-traits",
  "robust",
  "rstar",
- "serde",
 ]
 
 [[package]]
@@ -914,19 +899,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9b7820b9daea5457c9f21c69448905d723fbd21136ccf521748f23fd49e723ee"
 
 [[package]]
-name = "osm"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "clap",
- "csv",
- "fuzzy-geo",
- "geo",
- "osmpbfreader",
- "rayon",
-]
-
-[[package]]
 name = "osmpbfreader"
 version = "0.15.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1167,6 +1139,23 @@ name = "scopeguard"
 version = "1.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
+
+[[package]]
+name = "search"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "csv",
+ "geo",
+ "milli",
+ "obkv",
+ "osmpbfreader",
+ "rayon",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
 
 [[package]]
 name = "self_cell"
