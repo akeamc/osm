@@ -1,11 +1,10 @@
 use std::path::{Path, PathBuf};
 
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use geo::{Contains, LineString, Point, Polygon};
 use indicatif::{ProgressBar, ProgressStyle};
 use osmpbfreader::{OsmId, RelationId};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
-use tracing::warn;
 
 fn point_relations<'a>(
     polygons: &'a [(Polygon, RelationId)],
@@ -16,21 +15,12 @@ fn point_relations<'a>(
 
 #[derive(Debug, Parser)]
 struct Config {
-    #[command(subcommand)]
-    command: Command,
-}
-
-#[derive(Debug, Subcommand)]
-enum Command {
-    /// Process addresses from an OSM file.
-    Address {
-        /// OSM planet file to parse (.osm.pbf).
-        #[arg(long, short)]
-        input: String,
-        /// Output file
-        #[arg(long, short)]
-        output: PathBuf,
-    },
+    /// URL of OSM planet file to parse (.osm.pbf).
+    #[arg(long, short)]
+    input: String,
+    /// Output file.
+    #[arg(long, short)]
+    output: PathBuf,
 }
 
 fn process_addresses(url: &str, output: &Path) -> anyhow::Result<()> {
@@ -52,6 +42,10 @@ fn process_addresses(url: &str, output: &Path) -> anyhow::Result<()> {
 
     pb.finish();
 
+    eprintln!("- {} nodes", planet.nodes.len());
+    eprintln!("- {} ways", planet.ways.len());
+    eprintln!("- {} relations", planet.relations.len());
+
     eprintln!("forming polygons...");
 
     let mut csv = csv::Writer::from_path(output)?;
@@ -71,7 +65,8 @@ fn process_addresses(url: &str, output: &Path) -> anyhow::Result<()> {
                         Some((polygon, rel.id))
                     }));
                 } else {
-                    warn!("unable to form rings");
+                    #[cfg(feature = "tracing")]
+                    tracing::warn!(?rel.id, "unable to form rings");
                 };
             }
 
@@ -137,11 +132,9 @@ fn process_addresses(url: &str, output: &Path) -> anyhow::Result<()> {
 }
 
 fn main() -> anyhow::Result<()> {
-    let command = Config::parse().command;
+    let Config { input, output } = Config::parse();
 
     tracing_subscriber::fmt::init();
 
-    match command {
-        Command::Address { input, output } => process_addresses(&input, &output),
-    }
+    process_addresses(&input, &output)
 }

@@ -1,12 +1,9 @@
 use std::fmt::Display;
 
-use geo::Point;
-use osmpbfreader::{NodeId, OsmId, RelationId, WayId};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
+#[cfg(feature = "address")]
 pub mod planet;
-#[cfg(feature = "search")]
-pub mod search;
 
 mod json_str {
     use serde::{
@@ -35,30 +32,49 @@ mod json_str {
 }
 
 #[derive(Debug)]
-pub struct OsmIdWrapper(pub OsmId);
+pub enum OsmId {
+    Node(i64),
+    Way(i64),
+    Relation(i64),
+}
 
-impl From<OsmId> for OsmIdWrapper {
-    fn from(o: OsmId) -> Self {
-        Self(o)
+impl OsmId {
+    pub fn as_i64(&self) -> i64 {
+        match self {
+            OsmId::Node(n) => *n,
+            OsmId::Way(w) => *w,
+            OsmId::Relation(r) => *r,
+        }
     }
 }
 
-impl Display for OsmIdWrapper {
+#[cfg(feature = "address")]
+impl From<osmpbfreader::OsmId> for OsmId {
+    fn from(o: osmpbfreader::OsmId) -> Self {
+        match o {
+            osmpbfreader::OsmId::Node(n) => Self::Node(n.0),
+            osmpbfreader::OsmId::Way(w) => Self::Way(w.0),
+            osmpbfreader::OsmId::Relation(r) => Self::Relation(r.0),
+        }
+    }
+}
+
+impl Display for OsmId {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         write!(
             f,
             "{}{}",
-            match self.0 {
+            match self {
                 OsmId::Node(_) => "N",
                 OsmId::Way(_) => "W",
                 OsmId::Relation(_) => "R",
             },
-            self.0.inner_id()
+            self.as_i64()
         )
     }
 }
 
-impl Serialize for OsmIdWrapper {
+impl Serialize for OsmId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
         S: Serializer,
@@ -67,7 +83,7 @@ impl Serialize for OsmIdWrapper {
     }
 }
 
-impl<'de> Deserialize<'de> for OsmIdWrapper {
+impl<'de> Deserialize<'de> for OsmId {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: Deserializer<'de>,
@@ -82,82 +98,25 @@ impl<'de> Deserialize<'de> for OsmIdWrapper {
             .parse::<i64>()
             .map_err(de::Error::custom)?;
 
-        Ok(Self(match discriminant {
-            "N" => OsmId::Node(NodeId(inner_id)),
-            "W" => OsmId::Way(WayId(inner_id)),
-            "R" => OsmId::Relation(RelationId(inner_id)),
+        Ok(match discriminant {
+            "N" => OsmId::Node(inner_id),
+            "W" => OsmId::Way(inner_id),
+            "R" => OsmId::Relation(inner_id),
             d => {
                 return Err(de::Error::custom(format_args!(
                     "unrecognized discriminant `{d}`"
                 )))
             }
-        }))
+        })
     }
 }
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Record {
     pub name: String,
-    pub osm_id: OsmIdWrapper,
+    pub osm_id: OsmId,
     #[serde(with = "json_str")]
     pub location: Vec<String>,
     pub latitude: f64,
     pub longitude: f64,
-}
-
-impl Record {
-    #[cfg(feature = "search")]
-    fn into_milli_document(self) -> milli::Object {
-        use serde_json::{Map, Value};
-
-        let Self {
-            name,
-            osm_id,
-            location,
-            latitude,
-            longitude,
-        } = self;
-
-        let mut map = Map::new();
-
-        map.insert("id".to_owned(), Value::String(osm_id.to_string()));
-
-        map.insert("name".to_owned(), Value::String(name));
-
-        map.insert(
-            "location".to_owned(),
-            Value::Array(location.into_iter().map(Value::String).collect()),
-        );
-
-        let geo = {
-            let mut coordinates = serde_json::Map::new();
-
-            coordinates.insert(
-                "lat".to_owned(),
-                Value::Number(serde_json::Number::from_f64(latitude).unwrap()),
-            );
-            coordinates.insert(
-                "lon".to_owned(),
-                Value::Number(serde_json::Number::from_f64(longitude).unwrap()),
-            );
-
-            coordinates
-        };
-
-        map.insert("_geo".to_owned(), Value::Object(geo));
-
-        map
-    }
-}
-
-#[derive(Debug, Serialize, Deserialize)]
-pub struct MilliGeo {
-    lat: f64,
-    lon: f64,
-}
-
-impl From<MilliGeo> for Point {
-    fn from(MilliGeo { lat, lon }: MilliGeo) -> Self {
-        Point::new(lon, lat)
-    }
 }
