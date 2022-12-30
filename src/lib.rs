@@ -1,6 +1,7 @@
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
+use thiserror::Error;
 
 #[cfg(feature = "address")]
 pub mod planet;
@@ -74,6 +75,35 @@ impl Display for OsmId {
     }
 }
 
+#[derive(Debug, Error)]
+pub enum ParseOsmIdError {
+    #[error("invalid discriminant")]
+    InvalidDiscriminant,
+
+    #[error("invalid inner id")]
+    InvalidInnerId,
+}
+
+impl FromStr for OsmId {
+    type Err = ParseOsmIdError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let discriminant = s.get(0..1).ok_or(ParseOsmIdError::InvalidDiscriminant)?;
+        let inner_id = s
+            .get(1..)
+            .ok_or(ParseOsmIdError::InvalidInnerId)?
+            .parse::<i64>()
+            .map_err(|_| ParseOsmIdError::InvalidInnerId)?;
+
+        Ok(match discriminant {
+            "N" => OsmId::Node(inner_id),
+            "W" => OsmId::Way(inner_id),
+            "R" => OsmId::Relation(inner_id),
+            _ => return Err(ParseOsmIdError::InvalidDiscriminant),
+        })
+    }
+}
+
 impl Serialize for OsmId {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
     where
@@ -89,25 +119,7 @@ impl<'de> Deserialize<'de> for OsmId {
         D: Deserializer<'de>,
     {
         let s = String::deserialize(deserializer)?;
-        let discriminant = s
-            .get(0..1)
-            .ok_or_else(|| de::Error::custom("missing osm id type"))?;
-        let inner_id = s
-            .get(1..)
-            .ok_or_else(|| de::Error::custom("missing id"))?
-            .parse::<i64>()
-            .map_err(de::Error::custom)?;
-
-        Ok(match discriminant {
-            "N" => OsmId::Node(inner_id),
-            "W" => OsmId::Way(inner_id),
-            "R" => OsmId::Relation(inner_id),
-            d => {
-                return Err(de::Error::custom(format_args!(
-                    "unrecognized discriminant `{d}`"
-                )))
-            }
-        })
+        s.parse().map_err(de::Error::custom)
     }
 }
 
