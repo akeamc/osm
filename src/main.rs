@@ -1,15 +1,8 @@
-use std::{
-    mem::size_of,
-    path::{Path, PathBuf},
-};
+use std::path::{Path, PathBuf};
 
 use clap::{Parser, Subcommand};
 use geo::{Contains, LineString, Point, Polygon};
 use indicatif::{ProgressBar, ProgressStyle};
-use osm::{
-    planet::{self, nodes::Node, ways::Way},
-    Record,
-};
 use osmpbfreader::{OsmId, RelationId};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
 use tracing::warn;
@@ -41,9 +34,6 @@ enum Command {
 }
 
 fn process_addresses(url: &str, output: &Path) -> anyhow::Result<()> {
-    dbg!(size_of::<Node>());
-    dbg!(size_of::<Way>());
-
     let response = ureq::get(url).call()?;
     let len = response.header("content-length").unwrap().parse().unwrap();
     let reader = response.into_reader();
@@ -58,15 +48,9 @@ fn process_addresses(url: &str, output: &Path) -> anyhow::Result<()> {
         .progress_chars("#>-"),
     );
 
-    let planet = planet::read(&mut pb.wrap_read(reader))?;
+    let planet = osm::planet::read(&mut pb.wrap_read(reader))?;
 
     pb.finish();
-
-    dbg!(
-        planet.nodes.len(),
-        planet.ways.len(),
-        planet.relations.len()
-    );
 
     eprintln!("forming polygons...");
 
@@ -133,7 +117,7 @@ fn process_addresses(url: &str, output: &Path) -> anyhow::Result<()> {
                 .map(|(name, _lvl)| name.to_string())
                 .collect::<Vec<_>>();
 
-            Some(Record {
+            Some(osm::Record {
                 name: name.to_string(),
                 osm_id: id.into(),
                 location,
