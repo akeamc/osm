@@ -1,12 +1,106 @@
-use std::{collections::HashMap, fs::File, io::BufReader, path::Path};
+use std::{
+    collections::HashMap,
+    io::{BufReader, Read},
+};
 
 use geo::{Centroid, LineString, Point};
-use osmpbfreader::{Node, NodeId, OsmId, OsmObj, OsmPbfReader, Relation, RelationId, Way, WayId};
+use osmpbfreader::{NodeId, OsmId, OsmObj, OsmPbfReader, Relation, RelationId, Tags};
+
+use self::{nodes::Nodes, ways::Ways};
 
 #[derive(Debug, Default)]
+pub struct Meta {
+    pub name: Option<String>,
+}
+
+impl From<Tags> for Meta {
+    fn from(tags: Tags) -> Self {
+        if !tags.contains_key("amenity") {
+            return Default::default();
+        }
+
+        let name = tags.get("name").map(|s| s.to_string());
+
+        Self { name }
+    }
+}
+
+pub mod nodes {
+    use std::collections::HashMap;
+
+    use osmpbfreader::NodeId;
+
+    use super::Meta;
+
+    #[derive(Debug)]
+    pub struct Node {
+        // pub tags: Tags,
+        pub meta: Meta,
+        pub decimicro_lat: i32,
+        pub decimicro_lon: i32,
+    }
+
+    impl From<osmpbfreader::Node> for Node {
+        fn from(
+            osmpbfreader::Node {
+                id: _,
+                tags,
+                decimicro_lat,
+                decimicro_lon,
+            }: osmpbfreader::Node,
+        ) -> Self {
+            Self {
+                // tags,
+                meta: tags.into(),
+                decimicro_lat,
+                decimicro_lon,
+            }
+        }
+    }
+
+    impl Node {
+        #[inline]
+        pub fn lat(&self) -> f64 {
+            self.decimicro_lat as f64 * 1e-7
+        }
+
+        #[inline]
+        pub fn lon(&self) -> f64 {
+            self.decimicro_lon as f64 * 1e-7
+        }
+    }
+
+    pub type Nodes = HashMap<NodeId, Node>;
+}
+
+pub mod ways {
+    use std::collections::HashMap;
+
+    use osmpbfreader::{NodeId, WayId};
+
+    use super::Meta;
+
+    pub struct Way {
+        pub meta: Meta,
+        pub nodes: Vec<NodeId>,
+    }
+
+    impl From<osmpbfreader::Way> for Way {
+        fn from(osmpbfreader::Way { id: _, tags, nodes }: osmpbfreader::Way) -> Self {
+            Way {
+                meta: tags.into(),
+                nodes,
+            }
+        }
+    }
+
+    pub type Ways = HashMap<WayId, Way>;
+}
+
+#[derive(Default)]
 pub struct Planet {
-    pub nodes: HashMap<NodeId, Node>,
-    pub ways: HashMap<WayId, Way>,
+    pub nodes: Nodes,
+    pub ways: Ways,
     pub relations: HashMap<RelationId, Relation>,
 }
 
@@ -18,10 +112,10 @@ impl Planet {
     pub fn insert(&mut self, obj: OsmObj) {
         match obj {
             OsmObj::Node(n) => {
-                self.nodes.insert(n.id, n);
+                self.nodes.insert(n.id, n.into());
             }
             OsmObj::Way(w) => {
-                self.ways.insert(w.id, w);
+                self.ways.insert(w.id, w.into());
             }
             OsmObj::Relation(r) => {
                 self.relations.insert(r.id, r);
@@ -64,12 +158,8 @@ impl Planet {
                         assert!(w.nodes.len() >= 2);
                         Some(&w.nodes[..])
                     }
-                    "inner" => {
-                        // panic!()
-                        eprintln!("inner!!!! ({:?})", rel.id.0);
-                        None
-                    }
-                    _ => panic!(),
+                    "inner" | "" => None,
+                    _ => unreachable!(),
                 },
                 osmpbfreader::OsmId::Relation(_) => {
                     assert_eq!(r.role, "subarea");
@@ -79,7 +169,6 @@ impl Planet {
             .collect::<Vec<_>>();
 
         if ways.is_empty() {
-            eprintln!("EMPTY! (relation {})", rel.id.0);
             return None;
         }
 
@@ -112,16 +201,14 @@ impl Planet {
     }
 }
 
-pub fn read(path: impl AsRef<Path>) -> anyhow::Result<Planet> {
-    let mut pbf = OsmPbfReader::new(BufReader::with_capacity(1024 * 1024, File::open(path)?));
+pub fn read(reader: impl Read) -> anyhow::Result<Planet> {
+    let mut pbf = OsmPbfReader::new(BufReader::with_capacity(1024 * 1024, reader));
 
     let mut planet = Planet::new();
 
     for res in pbf.par_iter() {
         planet.insert(res?);
     }
-
-    eprintln!("built planet");
 
     Ok(planet)
 }

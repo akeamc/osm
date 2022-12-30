@@ -4,7 +4,7 @@ use geo::Point;
 use osmpbfreader::{NodeId, OsmId, RelationId, WayId};
 use serde::{de, Deserialize, Deserializer, Serialize, Serializer};
 
-pub mod osm;
+pub mod planet;
 #[cfg(feature = "search")]
 pub mod search;
 
@@ -98,8 +98,6 @@ impl<'de> Deserialize<'de> for OsmIdWrapper {
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Record {
     pub name: String,
-    pub alt_name: Option<String>,
-    pub operator: Option<String>,
     pub osm_id: OsmIdWrapper,
     #[serde(with = "json_str")]
     pub location: Vec<String>,
@@ -114,8 +112,6 @@ impl Record {
 
         let Self {
             name,
-            alt_name,
-            operator,
             osm_id,
             location,
             latitude,
@@ -127,14 +123,6 @@ impl Record {
         map.insert("id".to_owned(), Value::String(osm_id.to_string()));
 
         map.insert("name".to_owned(), Value::String(name));
-
-        if let Some(alt_name) = alt_name {
-            map.insert("alt_name".to_owned(), Value::String(alt_name));
-        }
-
-        if let Some(operator) = operator {
-            map.insert("operator".to_owned(), Value::String(operator));
-        }
 
         map.insert(
             "location".to_owned(),

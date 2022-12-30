@@ -1,10 +1,18 @@
-use std::path::{Path, PathBuf};
+use std::{
+    mem::size_of,
+    path::{Path, PathBuf},
+};
 
 use clap::{Parser, Subcommand};
 use geo::{Contains, LineString, Point, Polygon};
+use indicatif::{ProgressBar, ProgressStyle};
+use osm::{
+    planet::{self, nodes::Node, ways::Way},
+    Record,
+};
 use osmpbfreader::{OsmId, RelationId};
 use rayon::prelude::{IntoParallelRefIterator, ParallelIterator};
-use search::{osm, Record};
+use tracing::warn;
 
 fn point_relations<'a>(
     polygons: &'a [(Polygon, RelationId)],
@@ -25,34 +33,61 @@ enum Command {
     Address {
         /// OSM planet file to parse (.osm.pbf).
         #[arg(long, short)]
-        input: PathBuf,
+        input: String,
         /// Output file
         #[arg(long, short)]
         output: PathBuf,
     },
 }
 
-fn process_addresses(input: &Path, output: &Path) -> anyhow::Result<()> {
-    let osm = osm::read(input)?;
+fn process_addresses(url: &str, output: &Path) -> anyhow::Result<()> {
+    dbg!(size_of::<Node>());
+    dbg!(size_of::<Way>());
+
+    let response = ureq::get(url).call()?;
+    let len = response.header("content-length").unwrap().parse().unwrap();
+    let reader = response.into_reader();
+
+    eprintln!("downloading and parsing planet file...");
+    let pb = ProgressBar::new(len);
+    pb.set_style(
+        ProgressStyle::with_template(
+            "[{elapsed_precise}] [{wide_bar:.cyan/blue}] {bytes}/{total_bytes}",
+        )
+        .unwrap()
+        .progress_chars("#>-"),
+    );
+
+    let planet = planet::read(&mut pb.wrap_read(reader))?;
+
+    pb.finish();
+
+    dbg!(
+        planet.nodes.len(),
+        planet.ways.len(),
+        planet.relations.len()
+    );
+
+    eprintln!("forming polygons...");
 
     let mut csv = csv::Writer::from_path(output)?;
 
-    let polygons = osm
+    let polygons = planet
         .relations
         .values()
         .filter_map(|rel| {
             if rel.tags.contains("boundary", "administrative") {
-                if let Some(v) = osm.relation_rings(&rel.id) {
+                if let Some(v) = planet.relation_rings(&rel.id) {
                     return Some(v.into_iter().filter_map(|nodes| {
                         let exterior = nodes
                             .into_iter()
-                            .map(|n| osm.node_coords(&n))
+                            .map(|n| planet.node_coords(&n))
                             .collect::<Option<LineString<_>>>()?;
                         let polygon = Polygon::new(exterior, vec![]);
                         Some((polygon, rel.id))
                     }));
                 } else {
-                    eprintln!("unable to form rings");
+                    warn!("unable to form rings");
                 };
             }
 
@@ -61,31 +96,27 @@ fn process_addresses(input: &Path, output: &Path) -> anyhow::Result<()> {
         .flatten()
         .collect::<Vec<_>>();
 
-    eprintln!("{} polygons", polygons.len());
+    eprintln!("formed {} polygons", polygons.len());
 
-    let buildings = osm
+    let buildings = planet
         .nodes
         .par_iter()
         .map(|(k, _v)| OsmId::Node(*k))
-        .chain(osm.ways.par_iter().map(|(k, _v)| OsmId::Way(*k)));
+        .chain(planet.ways.par_iter().map(|(k, _v)| OsmId::Way(*k)));
 
     let records = buildings
         .filter_map(|id| {
-            let tags = match id {
-                OsmId::Node(n) => &osm.nodes.get(&n).unwrap().tags,
-                OsmId::Way(w) => &osm.ways.get(&w).unwrap().tags,
+            let name = match id {
+                OsmId::Node(n) => &planet.nodes.get(&n).unwrap().meta,
+                OsmId::Way(w) => &planet.ways.get(&w).unwrap().meta,
                 OsmId::Relation(_) => unreachable!(),
-            };
-
-            if !tags.contains_key("amenity") {
-                return None;
             }
+            .name
+            .as_ref()?;
 
-            let name = tags.get("name")?;
-
-            let point = osm.obj_coords(&id).unwrap();
+            let point = planet.obj_coords(&id).unwrap();
             let mut rels = point_relations(&polygons, &point)
-                .map(|(_p, rel)| osm.relations.get(rel).unwrap())
+                .map(|(_p, rel)| planet.relations.get(rel).unwrap())
                 .filter_map(|rel| {
                     let name = rel.tags.get("name")?.as_str();
                     let admin_level: u8 = rel.tags.get("admin_level")?.parse().unwrap();
@@ -104,8 +135,6 @@ fn process_addresses(input: &Path, output: &Path) -> anyhow::Result<()> {
 
             Some(Record {
                 name: name.to_string(),
-                alt_name: tags.get("alt_name").map(|s| s.to_string()),
-                operator: tags.get("operator").map(|s| s.to_string()),
                 osm_id: id.into(),
                 location,
                 latitude: (point.y() * 1e7).round() / 1e7,
@@ -125,6 +154,8 @@ fn process_addresses(input: &Path, output: &Path) -> anyhow::Result<()> {
 
 fn main() -> anyhow::Result<()> {
     let command = Config::parse().command;
+
+    tracing_subscriber::fmt::init();
 
     match command {
         Command::Address { input, output } => process_addresses(&input, &output),
