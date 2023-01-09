@@ -15,7 +15,7 @@ pub struct Meta {
 
 impl From<Tags> for Meta {
     fn from(tags: Tags) -> Self {
-        if !tags.contains_key("amenity") {
+        if !tags.contains_key("amenity") && !tags.contains_key("building") {
             return Default::default();
         }
 
