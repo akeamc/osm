@@ -19,9 +19,9 @@ impl From<Tags> for Meta {
             return Default::default();
         }
 
-        let name = tags.get("name").map(|s| s.to_string());
-
-        Self { name }
+        Self {
+            name: tags.get("name").map(ToString::to_string),
+        }
     }
 }
 
