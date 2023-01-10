@@ -32,7 +32,7 @@ mod json_str {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum OsmId {
     Node(i64),
     Way(i64),
