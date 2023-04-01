@@ -123,6 +123,8 @@ impl<'de> Deserialize<'de> for OsmId {
     }
 }
 
+pub const BUILDING_LEVEL: u8 = 15;
+
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Record {
     pub name: String,
@@ -131,4 +133,5 @@ pub struct Record {
     pub location: Vec<String>,
     pub latitude: f64,
     pub longitude: f64,
+    pub level: u8,
 }

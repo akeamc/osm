@@ -130,8 +130,8 @@ impl Planet {
                 let way = self.ways.get(w)?;
                 way.nodes
                     .iter()
-                    .map(|n| self.node_coords(n))
-                    .collect::<Option<LineString>>()?
+                    .filter_map(|n| self.node_coords(n))
+                    .collect::<LineString>()
                     .centroid()
             }
             OsmId::Relation(_) => todo!(),
