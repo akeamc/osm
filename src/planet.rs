@@ -161,10 +161,7 @@ impl Planet {
                     "inner" | "" => None,
                     _ => unreachable!(),
                 },
-                osmpbfreader::OsmId::Relation(_) => {
-                    assert_eq!(r.role, "subarea");
-                    None
-                }
+                osmpbfreader::OsmId::Relation(_) => None,
             })
             .collect::<Vec<_>>();
 
